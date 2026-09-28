@@ -1,0 +1,1118 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>ESP32 OLED Video Converter</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        background: #0b0f14;
+        color: #e8eef5;
+        font-family: Arial, sans-serif;
+        min-height: 100vh;
+    }
+
+    header {
+        padding: 25px;
+        text-align: center;
+        border-bottom: 1px solid #202832;
+    }
+
+    h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+    }
+
+    header p {
+        margin: 0;
+        color: #8d9aaa;
+    }
+
+    main {
+        max-width: 900px;
+        margin: auto;
+        padding: 25px;
+    }
+
+    .card {
+        background: #111720;
+        border: 1px solid #252f3b;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 8px;
+        color: #aab7c6;
+        font-size: 14px;
+    }
+
+    input[type="file"],
+    select,
+    input[type="number"] {
+        width: 100%;
+        padding: 12px;
+        background: #0b1016;
+        border: 1px solid #303b48;
+        color: white;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+
+    button {
+        border: 0;
+        border-radius: 9px;
+        padding: 12px 18px;
+        background: #2563eb;
+        color: white;
+        font-size: 15px;
+        cursor: pointer;
+        margin: 4px;
+    }
+
+    button:hover {
+        background: #3475f2;
+    }
+
+    button:disabled {
+        background: #333c47;
+        color: #7d8792;
+        cursor: not-allowed;
+    }
+
+    .danger {
+        background: #b91c1c;
+    }
+
+    .danger:hover {
+        background: #dc2626;
+    }
+
+    .preview-area {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 25px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #video {
+        display: none;
+    }
+
+    #oled {
+        width: 512px;
+        height: 256px;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        background: black;
+        border: 12px solid #202020;
+        border-radius: 12px;
+        box-shadow: 0 0 30px rgba(255,255,255,0.05);
+    }
+
+    .info {
+        line-height: 1.7;
+        color: #aab7c6;
+    }
+
+    .value {
+        color: white;
+        font-weight: bold;
+    }
+
+    progress {
+        width: 100%;
+        height: 18px;
+    }
+
+    #status {
+        margin-top: 15px;
+        padding: 12px;
+        background: #0b1016;
+        border-radius: 8px;
+        color: #9fb0c2;
+        min-height: 45px;
+    }
+
+    .downloads {
+        display: none;
+    }
+
+    .downloads a {
+        display: inline-block;
+        padding: 12px 18px;
+        margin: 5px;
+        background: #15803d;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+    }
+
+    .downloads a:hover {
+        background: #16a34a;
+    }
+
+    .warning {
+        color: #fbbf24;
+    }
+
+    code {
+        background: #080c11;
+        padding: 3px 6px;
+        border-radius: 5px;
+    }
+
+    @media (max-width: 600px) {
+        #oled {
+            width: 384px;
+            height: 192px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>ESP32 OLED Video Converter</h1>
+    <p>Convert videos for a 128×64 SSD1306 display</p>
+</header>
+
+<main>
+
+<div class="card">
+
+    <label>Choose a video</label>
+    <input id="videoFile" type="file" accept="video/*">
+
+    <label>FPS</label>
+    <select id="fps">
+        <option value="2">2 FPS</option>
+        <option value="5">5 FPS</option>
+        <option value="8">8 FPS</option>
+        <option value="10" selected>10 FPS</option>
+        <option value="12">12 FPS</option>
+        <option value="15">15 FPS</option>
+        <option value="20">20 FPS</option>
+    </select>
+
+    <label>Brightness threshold</label>
+    <input id="threshold" type="number" min="1" max="254" value="128">
+
+    <button id="previewButton" disabled>
+        Preview
+    </button>
+
+    <button id="convertButton" disabled>
+        Convert video
+    </button>
+
+</div>
+
+
+<div class="card">
+
+    <div class="preview-area">
+
+        <video id="video" muted playsinline></video>
+
+        <canvas id="oled"
+                width="128"
+                height="64">
+        </canvas>
+
+    </div>
+
+    <div class="info">
+
+        <p>
+            Resolution:
+            <span class="value">128 × 64</span>
+        </p>
+
+        <p>
+            Display:
+            <span class="value">SSD1306 monochrome</span>
+        </p>
+
+        <p>
+            Estimated frame size:
+            <span class="value">1024 bytes</span>
+        </p>
+
+        <p>
+            Estimated output:
+            <span id="estimate" class="value">---</span>
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <progress id="progress"
+              value="0"
+              max="100">
+    </progress>
+
+    <div id="status">
+        Select a video to begin.
+    </div>
+
+</div>
+
+
+<div class="card downloads">
+
+    <h2>Ready!</h2>
+
+    <p>
+        Upload <code>video.bin</code> and
+        <code>video_player.py</code> to your ESP32.
+    </p>
+
+    <a id="binDownload" download="video.bin">
+        Download video.bin
+    </a>
+
+    <a id="pyDownload" download="video_player.py">
+        Download video_player.py
+    </a>
+
+</div>
+
+</main>
+
+
+<script>
+
+const WIDTH = 128;
+const HEIGHT = 64;
+
+const videoFile = document.getElementById("videoFile");
+const video = document.getElementById("video");
+const canvas = document.getElementById("oled");
+const ctx = canvas.getContext("2d");
+
+const fpsSelect = document.getElementById("fps");
+const thresholdInput = document.getElementById("threshold");
+
+const previewButton =
+    document.getElementById("previewButton");
+
+const convertButton =
+    document.getElementById("convertButton");
+
+const status =
+    document.getElementById("status");
+
+const progress =
+    document.getElementById("progress");
+
+const estimate =
+    document.getElementById("estimate");
+
+const downloads =
+    document.querySelector(".downloads");
+
+const binDownload =
+    document.getElementById("binDownload");
+
+const pyDownload =
+    document.getElementById("pyDownload");
+
+let selectedFile = null;
+let previewTimer = null;
+
+
+/* -------------------------------------------------------
+   FILE SELECTION
+------------------------------------------------------- */
+
+videoFile.addEventListener("change", () => {
+
+    selectedFile = videoFile.files[0];
+
+    if (!selectedFile) {
+        previewButton.disabled = true;
+        convertButton.disabled = true;
+        return;
+    }
+
+    const url = URL.createObjectURL(selectedFile);
+
+    video.src = url;
+
+    video.onloadedmetadata = () => {
+
+        previewButton.disabled = false;
+        convertButton.disabled = false;
+
+        updateEstimate();
+
+        status.textContent =
+            `Loaded ${video.videoWidth}×${video.videoHeight} video.`;
+    };
+});
+
+
+/* -------------------------------------------------------
+   ESTIMATE
+------------------------------------------------------- */
+
+function updateEstimate() {
+
+    if (!video.duration || !isFinite(video.duration)) {
+        return;
+    }
+
+    const fps = Number(fpsSelect.value);
+
+    const frames = Math.ceil(video.duration * fps);
+
+    const bytes = frames * 1024 + 12;
+
+    estimate.textContent =
+        `${(bytes / 1024).toFixed(1)} KB ` +
+        `(${frames} frames)`;
+}
+
+fpsSelect.addEventListener("change", updateEstimate);
+
+
+/* -------------------------------------------------------
+   DRAW OLED PREVIEW
+------------------------------------------------------- */
+
+function drawOLED() {
+
+    if (!video.videoWidth) {
+        return;
+    }
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    /*
+       Preserve aspect ratio and put the video
+       in the middle of the 128×64 screen.
+    */
+
+    const sourceAspect =
+        video.videoWidth / video.videoHeight;
+
+    const targetAspect =
+        WIDTH / HEIGHT;
+
+    let drawWidth;
+    let drawHeight;
+    let x;
+    let y;
+
+    if (sourceAspect > targetAspect) {
+
+        drawWidth = WIDTH;
+        drawHeight = WIDTH / sourceAspect;
+
+    } else {
+
+        drawHeight = HEIGHT;
+        drawWidth = HEIGHT * sourceAspect;
+    }
+
+    x = (WIDTH - drawWidth) / 2;
+    y = (HEIGHT - drawHeight) / 2;
+
+    ctx.drawImage(
+        video,
+        x,
+        y,
+        drawWidth,
+        drawHeight
+    );
+
+    /*
+       Convert the preview to monochrome.
+    */
+
+    const image =
+        ctx.getImageData(
+            0,
+            0,
+            WIDTH,
+            HEIGHT
+        );
+
+    const threshold =
+        Number(thresholdInput.value);
+
+    for (let y = 0; y < HEIGHT; y++) {
+
+        for (let x = 0; x < WIDTH; x++) {
+
+            const i =
+                (y * WIDTH + x) * 4;
+
+            const r = image.data[i];
+            const g = image.data[i + 1];
+            const b = image.data[i + 2];
+
+            const brightness =
+                0.299 * r +
+                0.587 * g +
+                0.114 * b;
+
+            const white =
+                brightness >= threshold;
+
+            image.data[i] =
+                image.data[i + 1] =
+                image.data[i + 2] =
+                white ? 255 : 0;
+
+            image.data[i + 3] = 255;
+        }
+    }
+
+    ctx.putImageData(image, 0, 0);
+}
+
+
+/* -------------------------------------------------------
+   PREVIEW
+------------------------------------------------------- */
+
+previewButton.addEventListener("click", async () => {
+
+    if (previewTimer) {
+        clearInterval(previewTimer);
+        previewTimer = null;
+    }
+
+    video.currentTime = 0;
+
+    await video.play();
+
+    const fps = Number(fpsSelect.value);
+
+    previewTimer =
+        setInterval(
+            drawOLED,
+            1000 / fps
+        );
+
+    video.onended = () => {
+
+        clearInterval(previewTimer);
+        previewTimer = null;
+
+        status.textContent =
+            "Preview finished.";
+    };
+
+    status.textContent =
+        "Playing OLED preview...";
+});
+
+
+/* -------------------------------------------------------
+   CREATE SSD1306 FRAME
+------------------------------------------------------- */
+
+function makeFrame() {
+
+    /*
+       SSD1306 MONO_VLSB format.
+
+       128 × 64 / 8 = 1024 bytes.
+    */
+
+    const frame =
+        new Uint8Array(1024);
+
+    const image =
+        ctx.getImageData(
+            0,
+            0,
+            WIDTH,
+            HEIGHT
+        );
+
+    for (let y = 0; y < HEIGHT; y++) {
+
+        for (let x = 0; x < WIDTH; x++) {
+
+            const i =
+                (y * WIDTH + x) * 4;
+
+            const brightness =
+                image.data[i];
+
+            if (brightness > 127) {
+
+                const page =
+                    Math.floor(y / 8);
+
+                const bit =
+                    y % 8;
+
+                frame[
+                    page * WIDTH + x
+                ] |= (1 << bit);
+            }
+        }
+    }
+
+    return frame;
+}
+
+
+/* -------------------------------------------------------
+   SEEK AND RENDER FRAME
+------------------------------------------------------- */
+
+async function renderFrame(time) {
+
+    video.currentTime = time;
+
+    await new Promise(resolve => {
+
+        const handler = () => {
+
+            video.removeEventListener(
+                "seeked",
+                handler
+            );
+
+            resolve();
+        };
+
+        video.addEventListener(
+            "seeked",
+            handler
+        );
+    });
+
+    drawOLED();
+
+    return makeFrame();
+}
+
+
+/* -------------------------------------------------------
+   MICROTHON PLAYER
+------------------------------------------------------- */
+
+function makeMicroPython(fps, frameCount) {
+
+return `# ESP32 SSD1306 VIDEO PLAYER
+# Generated by ESP32 OLED Video Converter
+#
+# Display: SSD1306 128x64
+# SDA: GPIO21
+# SCL: GPIO22
+#
+# Put these two files on the ESP32:
+#
+#     video_player.py
+#     video.bin
+#
+# Then run:
+#
+#     import video_player
+#
+# or simply reboot the ESP32.
+
+from machine import Pin, I2C
+import framebuf
+import time
+
+
+VIDEO_FILE = "video.bin"
+
+SDA_PIN = 21
+SCL_PIN = 22
+
+WIDTH = 128
+HEIGHT = 64
+
+FPS = ${fps}
+FRAME_SIZE = 1024
+
+I2C_ID = 0
+
+
+class SSD1306:
+
+    def __init__(self, width, height, i2c, addr=0x3C):
+
+        self.width = width
+        self.height = height
+        self.i2c = i2c
+        self.addr = addr
+
+        self.buffer = bytearray(
+            width * height // 8
+        )
+
+        self.framebuf = framebuf.FrameBuffer(
+            self.buffer,
+            width,
+            height,
+            framebuf.MONO_VLSB
+        )
+
+        self.init_display()
+
+
+    def write_cmd(self, cmd):
+
+        self.i2c.writeto(
+            self.addr,
+            bytes([0x80, cmd])
+        )
+
+
+    def init_display(self):
+
+        for cmd in (
+            0xAE,
+            0x20, 0x00,
+            0xB0,
+            0xC8,
+            0x00,
+            0x10,
+            0x40,
+            0x81, 0x7F,
+            0xA1,
+            0xA6,
+            0xA8, 0x3F,
+            0xA4,
+            0xD3, 0x00,
+            0xD5, 0x80,
+            0xD9, 0xF1,
+            0xDA, 0x12,
+            0xDB, 0x40,
+            0x8D, 0x14,
+            0xAF
+        ):
+
+            self.write_cmd(cmd)
+
+
+    def show(self):
+
+        self.write_cmd(0x21)
+        self.write_cmd(0)
+        self.write_cmd(127)
+
+        self.write_cmd(0x22)
+        self.write_cmd(0)
+        self.write_cmd(7)
+
+        for i in range(0, len(self.buffer), 16):
+
+            chunk = self.buffer[i:i+16]
+
+            self.i2c.writeto(
+                self.addr,
+                b"\\x40" + chunk
+            )
+
+
+def find_display():
+
+    i2c = I2C(
+        I2C_ID,
+        scl=Pin(SCL_PIN),
+        sda=Pin(SDA_PIN),
+        freq=400000
+    )
+
+    devices = i2c.scan()
+
+    print("I2C devices:", devices)
+
+    if 0x3C in devices:
+        return i2c, 0x3C
+
+    if 0x3D in devices:
+        return i2c, 0x3D
+
+    raise RuntimeError(
+        "SSD1306 not found! Check SDA/SCL wiring."
+    )
+
+
+def play():
+
+    i2c, address = find_display()
+
+    display = SSD1306(
+        WIDTH,
+        HEIGHT,
+        i2c,
+        address
+    )
+
+    frame = bytearray(FRAME_SIZE)
+
+    print("Opening", VIDEO_FILE)
+
+    with open(VIDEO_FILE, "rb") as f:
+
+        header = f.read(12)
+
+        if len(header) != 12:
+            raise RuntimeError(
+                "Invalid video file"
+            )
+
+        if header[0:4] != b"ESPV":
+            raise RuntimeError(
+                "Not an ESP32 video file"
+            )
+
+        width = int.from_bytes(
+            header[4:6],
+            "little"
+        )
+
+        height = int.from_bytes(
+            header[6:8],
+            "little"
+        )
+
+        file_fps = int.from_bytes(
+            header[8:10],
+            "little"
+        )
+
+        frame_count = int.from_bytes(
+            header[10:14],
+            "little"
+        )
+
+        print(
+            "Video:",
+            width,
+            "x",
+            height,
+            file_fps,
+            "FPS"
+        )
+
+        # The converter uses a 14-byte header:
+        # magic 4
+        # width 2
+        # height 2
+        # fps 2
+        # frame count 4
+        #
+        # So read the missing two bytes correctly.
+        #
+        # Re-open and parse the complete header below.
+
+    with open(VIDEO_FILE, "rb") as f:
+
+        header = f.read(14)
+
+        if header[0:4] != b"ESPV":
+            raise RuntimeError(
+                "Invalid video header"
+            )
+
+        width = int.from_bytes(
+            header[4:6],
+            "little"
+        )
+
+        height = int.from_bytes(
+            header[6:8],
+            "little"
+        )
+
+        file_fps = int.from_bytes(
+            header[8:10],
+            "little"
+        )
+
+        frame_count = int.from_bytes(
+            header[10:14],
+            "little"
+        )
+
+        delay = 1.0 / file_fps
+
+        print(
+            "Playing",
+            frame_count,
+            "frames at",
+            file_fps,
+            "FPS"
+        )
+
+        for n in range(frame_count):
+
+            start = time.ticks_ms()
+
+            data = f.read(FRAME_SIZE)
+
+            if len(data) != FRAME_SIZE:
+                print("End of video.")
+                break
+
+            display.buffer[:] = data
+
+            display.show()
+
+            elapsed = (
+                time.ticks_ms() - start
+            ) / 1000
+
+            remaining = delay - elapsed
+
+            if remaining > 0:
+                time.sleep(remaining)
+
+    print("Video finished.")
+
+
+play()
+`;
+}
+
+
+/* -------------------------------------------------------
+   CONVERT
+------------------------------------------------------- */
+
+convertButton.addEventListener("click", async () => {
+
+    if (!selectedFile) {
+        return;
+    }
+
+    convertButton.disabled = true;
+    previewButton.disabled = true;
+
+    downloads.style.display = "none";
+
+    progress.value = 0;
+
+    const fps =
+        Number(fpsSelect.value);
+
+    const frameCount =
+        Math.ceil(video.duration * fps);
+
+    status.textContent =
+        `Converting ${frameCount} frames...`;
+
+    const frames = [];
+
+    for (let i = 0; i < frameCount; i++) {
+
+        const time =
+            Math.min(
+                i / fps,
+                Math.max(0, video.duration - 0.001)
+            );
+
+        try {
+
+            const frame =
+                await renderFrame(time);
+
+            frames.push(frame);
+
+        } catch (error) {
+
+            console.error(error);
+
+            status.textContent =
+                "Error while reading video.";
+
+            convertButton.disabled = false;
+            previewButton.disabled = false;
+
+            return;
+        }
+
+        const percent =
+            ((i + 1) / frameCount) * 100;
+
+        progress.value = percent;
+
+        status.textContent =
+            `Converting frame ${i + 1} / ${frameCount} ` +
+            `(${Math.round(percent)}%)`;
+
+        /*
+           Give the browser some time to update
+           the UI instead of freezing completely.
+        */
+
+        await new Promise(
+            resolve => setTimeout(resolve, 0)
+        );
+    }
+
+
+    /*
+       Build ESPV file.
+
+       Header:
+
+       4 bytes  = ESPV
+       2 bytes  = width
+       2 bytes  = height
+       2 bytes  = FPS
+       4 bytes  = frame count
+
+       Total = 14 bytes.
+    */
+
+    const header =
+        new ArrayBuffer(14);
+
+    const headerView =
+        new DataView(header);
+
+    const headerBytes =
+        new Uint8Array(header);
+
+    headerBytes[0] = 69;  // E
+    headerBytes[1] = 83;  // S
+    headerBytes[2] = 80;  // P
+    headerBytes[3] = 86;  // V
+
+    headerView.setUint16(
+        4,
+        WIDTH,
+        true
+    );
+
+    headerView.setUint16(
+        6,
+        HEIGHT,
+        true
+    );
+
+    headerView.setUint16(
+        8,
+        fps,
+        true
+    );
+
+    headerView.setUint32(
+        10,
+        frameCount,
+        true
+    );
+
+
+    const parts = [header];
+
+    for (const frame of frames) {
+        parts.push(frame);
+    }
+
+
+    const blob =
+        new Blob(
+            parts,
+            {
+                type:
+                    "application/octet-stream"
+            }
+        );
+
+
+    const binURL =
+        URL.createObjectURL(blob);
+
+    binDownload.href = binURL;
+
+
+    /*
+       Generate the ready-to-go MicroPython
+       player.
+    */
+
+    const python =
+        makeMicroPython(
+            fps,
+            frameCount
+        );
+
+    const pyBlob =
+        new Blob(
+            [python],
+            {
+                type: "text/plain"
+            }
+        );
+
+    const pyURL =
+        URL.createObjectURL(pyBlob);
+
+    pyDownload.href = pyURL;
+
+
+    downloads.style.display = "block";
+
+    status.textContent =
+        `DONE! ${frameCount} frames converted.`;
+
+    progress.value = 100;
+
+    convertButton.disabled = false;
+    previewButton.disabled = false;
+});
+
+
+/* -------------------------------------------------------
+   INITIAL CANVAS
+------------------------------------------------------- */
+
+ctx.fillStyle = "black";
+ctx.fillRect(
+    0,
+    0,
+    WIDTH,
+    HEIGHT
+);
+
+ctx.fillStyle = "white";
+ctx.font = "8px monospace";
+ctx.fillText(
+    "ESP32 OLED",
+    25,
+    30
+);
+
+ctx.fillText(
+    "128 x 64",
+    35,
+    42
+);
+
+</script>
+
+</body>
+</html>
+```
